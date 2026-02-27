@@ -1,0 +1,13 @@
+.venv/
+.vscode/
+__pycache__/
+.mypy_cache/
+*.pyc
+*.pyo
+*.pyd
+env/
+build/
+dist/
+*.egg-info/
+config.py
+micropico.json

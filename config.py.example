@@ -1,0 +1,15 @@
+# config.py
+
+# Wi-Fi
+WIFI_SSID = "WIFI_ssid"
+WIFI_PASSWORD = "00000000"
+
+# Server
+SERVER_BASE_URL = "http://api.svitlobot.in.ua"   
+PING_PATH = "/channelPing"                # куди слати запит
+API_KEY = "**********"                    # якщо треба авторизація
+TIMEOUT_S = 8                             # таймаут мережевих запитів
+PING_INTERVAL_S = 75                      # timeout between requests
+WIFI_CONNECT_TIMEOUT_S = 20
+
+FAKE_REQUESTS=True
