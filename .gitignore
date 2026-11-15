@@ -1,13 +1,14 @@
-.venv/
-.vscode/
-__pycache__/
-.mypy_cache/
-*.pyc
-*.pyo
-*.pyd
-env/
+# ESP-IDF
 build/
-dist/
-*.egg-info/
-config.py
-micropico.json
+sdkconfig
+sdkconfig.old
+sdkconfig.secrets
+managed_components/
+
+# Редактори
+.vscode/
+.cache/
+.clangd
+
+# Старе середовище MicroPython-версії
+.venv/

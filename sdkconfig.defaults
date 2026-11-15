@@ -1,0 +1,35 @@
+# Плата: ESP32 DevKit (WROOM-32), 4 MB flash
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+# На цій платі flash-чіп Boya
+CONFIG_SPI_FLASH_SUPPORT_BOYA_CHIP=y
+
+# Дві OTA-партиції + coredump (див. partitions.csv)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Відкат на попередню прошивку, якщо нова не дожила до першого циклу пінгу
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Task Watchdog: задача пінгу зобовʼязана звітувати; зависання → перезавантаження
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=60
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# Будь-який panic → дамп у flash і перезавантаження
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+
+# Просадка живлення → чистий reset, а не дивна поведінка
+CONFIG_ESP_BROWNOUT_DET=y
+
+# HTTPS: вбудований набір кореневих сертифікатів (svitlobot.in.ua → GTS Root R4 / GlobalSign)
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+# Сервер віддає GTS Root R4 з крос-підписом від GlobalSign Root CA, якого в наборі немає —
+# без цього TLS падає з «Failed to verify certificate»
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y
+
+# Довший URL із ключем каналу і заголовок X-OTA-Token
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
