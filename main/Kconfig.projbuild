@@ -1,0 +1,57 @@
+menu "Svitlobot"
+
+    config SVITLOBOT_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+
+    config SVITLOBOT_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+
+    config SVITLOBOT_CHANNEL_KEY
+        string "Channel key"
+        default ""
+        help
+            Ключ каналу з чат-бота Світлобота.
+
+    config SVITLOBOT_PING_URL
+        string "Ping URL"
+        default "https://api.svitlobot.in.ua/channelPing"
+
+    config SVITLOBOT_PING_INTERVAL_S
+        int "Ping interval, s"
+        range 30 600
+        default 75
+
+    config SVITLOBOT_HTTP_TIMEOUT_MS
+        int "HTTP timeout, ms"
+        range 2000 30000
+        default 10000
+        help
+            Має бути помітно меншим за ESP_TASK_WDT_TIMEOUT_S, інакше watchdog
+            перезавантажить плату посеред повільного запиту.
+
+    config SVITLOBOT_HOSTNAME
+        string "Hostname (DHCP і mDNS: <hostname>.local)"
+        default "svitlobot"
+
+    config SVITLOBOT_LED_GPIO
+        int "Status LED GPIO"
+        default 2
+        help
+            ESP32 DevKit (WROOM-32): вбудований синій діод на GPIO2.
+
+    config SVITLOBOT_LED_ACTIVE_HIGH
+        bool "LED is active-high"
+        default y
+
+    config SVITLOBOT_OTA_ENABLE
+        bool "Enable OTA over local network"
+        default y
+
+    config SVITLOBOT_OTA_TOKEN
+        string "OTA token (заголовок X-OTA-Token, мінімум 16 символів)"
+        depends on SVITLOBOT_OTA_ENABLE
+        default ""
+
+endmenu

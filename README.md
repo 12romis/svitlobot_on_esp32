@@ -1,52 +1,91 @@
-# ESP32 MicroPython Project
+# Світлобот на ESP32 (ESP-IDF)
 
-This repository contains a minimal MicroPython project for an ESP32 board.
+Датчик наявності світла для [Світлобота](https://svitlobot.in.ua). Плата живиться від мережі **без** резерву і кожні 75 с надсилає `GET /channelPing?channel_key=…`. Коли світло зникає, пінги зупиняються, і сервер фіксує відключення. Роутер має бути на ДБЖ.
 
-## Getting started
+Плата: ESP32 DevKit (WROOM-32), 4 MB flash. Фреймворк: ESP-IDF v6.1.
 
-1. **Create a virtual environment** (already done):
-   ```
-   python -m venv .venv
-   .\.venv\Scripts\activate
-   pip install --upgrade pip
-   pip install esptool mpremote
-   ```
+## Індикація (вбудований діод, GPIO2)
 
-2. **Find the COM port** for your ESP32:
-   - Open **Device Manager** on Windows
-   - Expand **Ports (COM & LPT)** and note the `COMx` associated with your board.
+Кожен стан — свій **безперервний** патерн, що крутиться, доки стан не зміниться. Рівного світла немає ніколи: якщо діод світить рівно або не світить зовсім — прошивка не працює (або нема живлення).
 
-3. **Flash MicroPython firmware** (replace `COMx` and `firmware.bin`):
-   ```sh
-   .venv\Scripts\esptool.exe --chip esp32 --port COMx write_flash -z 0x1000 firmware.bin
-   ```
+| Патерн | Стан | Що це означає | Що перевірити |
+|---|---|---|---|
+| Світить, раз на 3 с коротко гасне | **OK** | останній пінг успішний (2xx) | — |
+| Повільне рівне блимання 1 Гц | **Нема Wi-Fi** | немає звʼязку з роутером, неправильний пароль, слабкий сигнал | роутер, його ДБЖ |
+| 2 спалахи, пауза | **Нема інтернету** | DNS / TCP / TLS / таймаут або сервер віддав 5xx | провайдер або сервер Світлобота |
+| 3 спалахи, пауза | **Сервер відмовив** | 4xx: неправильний ключ (400), забагато запитів (429); або ключ/SSID не задані | `sdkconfig.secrets` / menuconfig |
+| Швидке мерехтіння 5 Гц | **Старт / OTA** | завантаження, перше підключення або запис нової прошивки | зачекати |
 
-4. **Open the REPL** using mpremote:
-   ```sh
-   .venv\Scripts\mpremote connect COMx repl
-   ```
+Стан помилки тримається до наступного успішного пінгу. Після відновлення Wi-Fi пінг іде одразу, не чекаючи кінця інтервалу.
 
-5. **Upload, sync or retrieve files** with MicroPico extension:
-   - Open the Command Palette (`Ctrl+Shift+P`).
-   - Run **MicroPico: Configure project** and select your COM port (e.g. `COM3`).
-   - After configuration the extension drops a `.micropico.json` file in the workspace, which stores the chosen port.
-   - Use **MicroPico: Upload** or **MicroPico: Sync** to send `main.py`, `boot.py`, etc.
-   - **To copy existing files from the board** without flashing, you can either:
-     * Run the `mpremote` command line from the venv (see below), or
-     * Use MicroPico's file explorer to download individual files.
+## Архітектура
 
-   After configuration, the extension creates a `.micropico.json` or similar file in the workspace.
+```
+main/app_main.c        ініціалізація, читає Kconfig і передає налаштування компонентам
+components/
+  app_state/           єдиний стан пристрою + слухач; OTA накладається поверх стану звʼязку
+  status_led/          патерни на esp_timer, без власної задачі
+  wifi_link/           Wi-Fi STA, подієве перепідключення з backoff 1→60 с
+  pinger/              задача FreeRTOS: HTTPS GET, класифікація відповіді, Task Watchdog
+  ota_server/          HTTP-сервер у LAN: POST /ota, GET /status
+```
 
-## Project files
+Задачі FreeRTOS:
 
-- `boot.py` &ndash; executed on boot; currently minimal.
-- `main.py` &ndash; blinks onboard LED and prints status.
-- `.vscode/settings.json` &ndash; points to the virtual environment interpreter.
-- `.gitignore` &ndash; ignores virtual environment and caches.
+| Задача | Чия | Що робить |
+|---|---|---|
+| `pinger` (пріоритет 5, стек 8 KB) | наша | цикл пінгу; підписана на Task WDT і годує його щосекунди |
+| `httpd` | esp_http_server | обслуговує `/ota` і `/status` |
+| `esp_timer` | IDF | кроки патернів діода, таймер перепідключення Wi-Fi |
+| `sys_evt`, `wifi`, `tcpip` | IDF | події, драйвер Wi-Fi, стек lwIP |
+| `mdns` | espressif/mdns | відповідає на `svitlobot.local` |
 
-## Tips
+Захист від «завислого, але зеленого» стану:
+- **Task Watchdog** (60 с): якщо цикл пінгу завис, плата перезавантажується;
+- жорсткий таймаут HTTP 10 с;
+- panic → core dump у flash і перезавантаження; brownout → чистий reset;
+- **відкат OTA**: нова прошивка підтверджується лише після повного циклу з Wi-Fi, інакше bootloader повертає попередню.
 
-- Change `LED_PIN` in `main.py` if your board uses a different GPIO for the onboard LED.
-- Format-on-save is enabled in workspace settings.
+## Налаштування
 
-Enjoy developing with MicroPython on your ESP32!
+Секрети не потрапляють у git:
+
+```sh
+cp sdkconfig.secrets.example sdkconfig.secrets   # заповнити SSID, пароль, ключ каналу, OTA-токен
+```
+
+Решта параметрів (інтервал, таймаут, GPIO діода, hostname) — у `idf.py menuconfig` → **Svitlobot**.
+Значення з `sdkconfig.secrets` застосовуються лише під час створення `sdkconfig`. Якщо змінюєш секрети — видали `sdkconfig` або зміни їх у menuconfig.
+
+## Збирання і прошивка у VS Code
+
+Потрібне розширення **ESP-IDF** від Espressif.
+
+1. Відкрити теку проєкту. У статус-барі вибрати: версію ESP-IDF **v6.1**, target **esp32**, порт `/dev/ttyUSB0` (або `COMx` на Windows), метод прошивки **UART**.
+2. **ESP-IDF: Build, Flash and Monitor** (іконка 🔥 у статус-барі). Вихід із монітора — `Ctrl+]`.
+
+Те саме з терміналу:
+
+```sh
+. ~/.espressif/tools/activate_idf_v6.1.sh
+idf.py build
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+На Linux для доступу до порту користувач має бути в групі `dialout`.
+
+## Оновлення по Wi-Fi (OTA)
+
+Після першої прошивки кабелем:
+
+```sh
+idf.py build
+curl --data-binary @build/svitlobot.bin \
+     -H "X-OTA-Token: <CONFIG_SVITLOBOT_OTA_TOKEN>" \
+     http://svitlobot.local/ota
+```
+
+Діагностика без кабелю: `curl http://svitlobot.local/status` — стан, версія, аптайм, причина останнього reset.
+Якщо `.local` не резолвиться — IP плати видно в DHCP-клієнтах роутера (hostname `svitlobot`).
+
+Розбір дампу після падіння: `idf.py -p /dev/ttyUSB0 coredump-info`.
